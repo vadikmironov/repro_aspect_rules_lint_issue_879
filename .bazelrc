@@ -1,0 +1,55 @@
+##
+## Generic flags for all languages
+##
+
+# Use GitHub mirror for BCR to work around bcr.bazel.build outages
+# common --registry=https://raw.githubusercontent.com/bazelbuild/bazel-central-registry/main/
+
+# Disabling runfiles links drastically increases performance in slow disk IO situations
+# Do not build runfile trees by default. If an execution strategy relies on runfile
+# symlink tree, the tree is created on-demand. See: https://github.com/bazelbuild/bazel/issues/6627
+# and https://github.com/bazelbuild/bazel/commit/03246077f948f2790a83520e7dccc2625650e6df
+build --nobuild_runfile_links
+test --nobuild_runfile_links
+
+# https://bazel.build/reference/command-line-reference#flag--legacy_external_runfiles
+build --nolegacy_external_runfiles
+test --nolegacy_external_runfiles
+
+test --test_output=errors
+
+# Performance test configuration - shows full test output including throughput stats
+test:perf --test_output=all
+
+# Downloader configuration for URL rewriting and blocking
+# https://bazel.build/versions/8.5.0/reference/command-line-reference#flag--downloader_config
+common --downloader_config=bazel_downloader.cfg
+
+# Enable automatic platform-specific configuration
+# This automatically applies --config=linux, --config=macos, or --config=windows
+# based on the host OS. See:
+# https://bazel.build/reference/command-line-reference#common_options-flag--enable_platform_specific_config
+common --enable_platform_specific_config
+
+##
+## Windows specific flags
+##
+
+# Windows symlink support required for rules_rust crate_universe and buildifier
+# Requires Windows Developer Mode to be enabled (Settings -> For Developers)
+# References:
+# - https://bazel.build/configure/windows
+# - https://github.com/bazelbuild/rules_rust/issues/423
+startup --windows_enable_symlinks
+
+# Lint tests are tagged "lint". Exclude them from the default test set so
+# `bazel test //...` runs functional tests only. Run lint explicitly with
+# `bazel test --test_tag_filters=lint //...`.
+test --test_tag_filters=-lint
+# `--config=raw` clears the filter to run the full set including lint tests.
+test:raw --test_tag_filters=
+
+##
+## Local developer overrides (gitignored)
+##
+try-import %workspace%/user.bazelrc

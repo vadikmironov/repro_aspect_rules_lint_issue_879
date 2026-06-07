@@ -1,0 +1,4 @@
+bazel-bin
+bazel-repro_aspect_rules_lint_issue_879
+bazel-out
+bazel-testlogs

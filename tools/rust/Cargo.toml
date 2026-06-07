@@ -1,0 +1,17 @@
+[workspace]
+
+[package]
+name = "repro_aspect_rules_lint_issue_879_crates"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[lib]
+path = "fake.rs"
+
+# After editing dependencies, regenerate the lockfile:
+#   CARGO_BAZEL_REPIN=1 bazel fetch @crates//...
+[dependencies]
+# --- BEGIN user-managed ---
+# Your crates here (members of [dependencies]). Preserved across re-bootstrap.
+# --- END user-managed ---

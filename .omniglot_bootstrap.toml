@@ -1,0 +1,7 @@
+# .omniglot_bootstrap.toml — written by the bootstrap tool so a re-bootstrap
+# recovers this repo's selection exactly. Rewritten on each re-bootstrap;
+# edit only if you know what you're doing.
+[repo]
+module_dir = "apps"
+languages = ["go", "rust"]
+features = ["lint"]

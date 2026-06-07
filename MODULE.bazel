@@ -1,0 +1,130 @@
+module(
+    name = "repro_aspect_rules_lint_issue_879",
+    version = "0.0.1",
+    bazel_compatibility = [">=8.0.0"],
+    repo_name = "repro_aspect_rules_lint_issue_879",
+)
+
+#
+# platforms block (custom C++ toolchains dependency)
+#
+# Bazel Platforms houses all canonical constraint_setting()s, constraint_value()s
+# and platform()s that are universally useful across languages and Bazel projects.
+#
+bazel_dep(name = "platforms", version = "1.1.0")
+
+#
+# bazel_skylib block (rules_lint dependency)
+#
+# Skylib is a library of Starlark functions for manipulating collections, file
+# paths, and various other data types in the domain of Bazel build rules.
+#
+bazel_dep(name = "bazel_skylib", version = "1.9.0")
+
+#
+# rules_shell block
+#
+# This module contains the Bazel ruleset for shell scripts.
+#
+# Please find documentation here:
+# https://github.com/bazelbuild/rules_shell/releases
+#
+bazel_dep(name = "rules_shell", version = "0.8.0")
+
+#
+# Install a prebuilt version of buildifier. Buildifier is a linter and autoformatter
+# for starlark files.
+# https://github.com/keith/buildifier-prebuilt/releases
+#
+bazel_dep(name = "buildifier_prebuilt", version = "8.5.1.2", dev_dependency = True)
+
+#
+# aspect_rules_lint block
+#
+# This ruleset integrates linting and formatting as first-class concepts under Bazel.
+# The root ruleset resolves fine from BCR; 2.6.0 is published. The problem this
+# repo demonstrates is reaching the *Rust clippy submodule* that 2.6.0 split out.
+#
+# Please find documentation here:
+# https://github.com/aspect-build/rules_lint/releases
+#
+bazel_dep(name = "aspect_rules_lint", version = "2.6.0")
+
+# ============================================================================
+# rules_lint #879 repro — consuming the Rust clippy SUBMODULE downstream
+# ============================================================================
+# https://github.com/aspect-build/rules_lint/issues/879
+#
+# In 2.5.2 clippy shipped inside the umbrella module:
+#     load("@aspect_rules_lint//lint:clippy.bzl", "lint_clippy_aspect")
+# In 2.6.0 (#865) it moved into a separate module, aspect_rules_lint_rules_rust,
+# and the documented load path became:
+#     load("@aspect_rules_lint_rules_rust//:clippy.bzl", "lint_clippy_aspect")
+# (see tools/lint/linters.bzl). That submodule cannot be brought in by any
+# downstream-consumable mechanism. Each variant below is one documented attempt;
+# B/C/D are pinned at main HEAD (eff4e9396d, 2026-06-05) to show the blockers
+# persist after dzbarsky's latest commit, 30d965d (PR #846).
+#
+# Exactly ONE variant should be active at a time. Variant A is active by default.
+# Swap by commenting A and uncommenting another. Run any variant with:
+#     bazel mod deps
+# ----------------------------------------------------------------------------
+#
+# ---- Variant A (ACTIVE) — BCR ............................. blocker #1 -------
+# Follow the docs literally: a plain bazel_dep. Fails because the submodule was
+# never published to the Bazel Central Registry.
+#   Expected: "module ... not found in registries" at resolution.
+bazel_dep(name = "aspect_rules_lint_rules_rust", version = "0.0.0")
+#
+# ---- Variant B — archive_override ......................... blocker #2 -------
+# Reach the submodule via GitHub's auto-generated source tarball. Fails because
+# .gitattributes marks `lint/rules_rust export-ignore`, so the directory is
+# stripped from every archive (release tarballs AND github.com/.../archive/*).
+#   Expected: strip_prefix path does not exist in the extracted archive.
+# bazel_dep(name = "aspect_rules_lint_rules_rust", version = "0.0.0")
+# archive_override(
+#     module_name = "aspect_rules_lint_rules_rust",
+#     urls = ["https://github.com/aspect-build/rules_lint/archive/eff4e9396d262b7f0d3593ddeaee2e262f374199.tar.gz"],
+#     strip_prefix = "rules_lint-eff4e9396d262b7f0d3593ddeaee2e262f374199/lint/rules_rust",
+# )
+#
+# ---- Variant C — git_override ............................. blocker #3 -------
+# git clone DOES contain lint/rules_rust (export-ignore is archive-only), so the
+# clone succeeds — but the submodule's MODULE.bazel carries a versionless
+# `bazel_dep(name = "aspect_rules_lint")` plus an in-tree
+# `local_path_override(path = "../..")` that Bazel silently drops outside the
+# root module, leaving the versionless dep unresolvable.
+#   Expected: failure at main-repo-mapping / versionless bazel_dep.
+# bazel_dep(name = "aspect_rules_lint_rules_rust", version = "0.0.0")
+# git_override(
+#     module_name = "aspect_rules_lint_rules_rust",
+#     remote = "https://github.com/aspect-build/rules_lint.git",
+#     commit = "eff4e9396d262b7f0d3593ddeaee2e262f374199",
+#     strip_prefix = "lint/rules_rust",
+# )
+#
+# ---- Variant D — the NEW module from #846 ......... blockers #2 + #3 ---------
+# 30d965d (PR #846) added a parallel module, aspect_rules_lint_rust (lint/rust/),
+# which the upstream example on main migrated to. It reproduces the SAME packaging
+# bugs — .gitattributes adds `lint/rust export-ignore`; MODULE.bazel keeps the
+# dropped local_path_override — and additionally depends on rules_rs rather than
+# rules_rust, so it is not a drop-in for a rules_rust repo. (For D, also switch
+# the load in tools/lint/linters.bzl to @aspect_rules_lint_rust//:clippy.bzl.)
+#   Expected (archive): dir stripped, as in Variant B.
+# bazel_dep(name = "aspect_rules_lint_rust", version = "0.0.0")
+# archive_override(
+#     module_name = "aspect_rules_lint_rust",
+#     urls = ["https://github.com/aspect-build/rules_lint/archive/eff4e9396d262b7f0d3593ddeaee2e262f374199.tar.gz"],
+#     strip_prefix = "rules_lint-eff4e9396d262b7f0d3593ddeaee2e262f374199/lint/rust",
+# )
+# ============================================================================
+
+#
+# Rust bazel modules shard
+#
+include("//tools/rust:rust_segment.MODULE.bazel")
+
+#
+# Go bazel modules shard
+#
+include("//tools/go:go_segment.MODULE.bazel")
