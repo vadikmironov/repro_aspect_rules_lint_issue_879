@@ -1,42 +1,66 @@
 # repro_aspect_rules_lint_issue_879
 
 <!-- --- BEGIN user-managed --- -->
-Minimal reproduction for **aspect-build/rules_lint#879** — the Rust clippy
-submodule split out in rules_lint 2.6.0 is not consumable by downstream repos.
+Tracks the state of downstream Rust (clippy) linting in **aspect_rules_lint**,
+for a repo that builds its Rust with **BCR `rules_rust`**. Originally a repro for
+[#879](https://github.com/aspect-build/rules_lint/issues/879); now it shows where
+2.7.1 lands.
 
-In 2.5.2 clippy lived in the umbrella module
-(`@aspect_rules_lint//lint:clippy.bzl`). 2.6.0 (#865) moved it into a separate
-module, `aspect_rules_lint_rules_rust`, with the documented load
-`@aspect_rules_lint_rules_rust//:clippy.bzl` — but that submodule cannot be
-brought in by any downstream-consumable mechanism.
+## The #879 packaging blockers are fixed in 2.7.1
 
-This repo isolates the three blockers as mutually-exclusive variants in
-`MODULE.bazel`. **Variant A is active by default.** To run another, comment A and
-uncomment B/C/D, then:
+In 2.6.0 the clippy aspect moved out of the umbrella module into a separate
+module that downstream repos couldn't pull in (not on the BCR; `export-ignore`
+stripped it from release archives; an in-tree `local_path_override` made
+overrides unresolvable). As of **2.7.1** that module is published to the Bazel
+Central Registry as **`aspect_rules_lint_rust`** (renamed from
+`aspect_rules_lint_rules_rust`), so a plain `bazel_dep` resolves with no
+overrides — this is the active **Variant A** in `MODULE.bazel`:
 
-```bash
-bazel mod graph        # forces module resolution; no build/toolchains needed
+```starlark
+bazel_dep(name = "aspect_rules_lint", version = "2.7.1")
+bazel_dep(name = "aspect_rules_lint_rust", version = "0.0.2")
 ```
 
-All variants are pinned at `main` HEAD `eff4e9396d` (2026-06-05) — i.e. *after*
-dzbarsky's latest commit `30d965d` (PR #846) — to show the blockers persist.
+```bash
+bazel mod graph        # resolves; pulls aspect_rules_lint@2.7.1 + rules_rs@0.0.83
+```
 
-| Variant | How it tries to pull in the submodule | Blocker | Expected error |
-|---------|----------------------------------------|---------|----------------|
-| **A** (active) | `bazel_dep` from BCR | #1 not published | `module aspect_rules_lint_rules_rust@0.0.0 not found in registries` |
-| **B** | `archive_override` → GitHub `archive/<sha>.tar.gz` | #2 `export-ignore` strips `lint/rules_rust` from archives | `Prefix ".../lint/rules_rust" was given, but not found in the archive` |
-| **C** | `git_override` (clone keeps the dir) | #3 submodule's versionless `bazel_dep` + dropped in-tree `local_path_override` | `bad bazel_dep on module 'aspect_rules_lint' with no version` |
-| **D** | `archive_override` for the new `aspect_rules_lint_rust` module (PR #846) | #2 again — `.gitattributes` adds `lint/rust export-ignore` | `Prefix ".../lint/rust" was given, but not found in the archive` |
+(The old packaging-blocker variants B/C/D — `archive_override` / `git_override`
+against `main` HEAD — are kept commented in `MODULE.bazel` as pre-2.7.1 history.)
 
-Notes:
-- The root `aspect_rules_lint@2.6.0` resolves fine from BCR; only the Rust
-  submodule is the problem.
-- **B vs C** is the key contrast: same commit, same directory — `git_override`
-  clones it successfully, yet `archive_override` can't find it. That isolates the
-  cause to `export-ignore` (archive-only), not a missing feature.
-- **Variant D** also requires switching the load in `tools/lint/linters.bzl` to
-  `@aspect_rules_lint_rust//:clippy.bzl`, and that module depends on `rules_rs`
-  (not `rules_rust`), so it is not a drop-in for a `rules_rust` repo.
+## …but the clippy aspect silently no-ops on a BCR `rules_rust` target
+
+`apps/rust_app/src/main.rs` contains a deny-by-default `clippy::eq_op` violation,
+yet the lint test passes green:
+
+```bash
+bazel test //apps/rust_app:rust_app.lint --test_tag_filters=lint
+# //apps/rust_app:rust_app.lint   PASSED      <-- expected FAIL
+```
+
+clippy never runs. The report artifact
+(`bazel-bin/apps/rust_app/rust_app.AspectRulesLintClippy.report`) is empty, and
+`bazel test … -s` shows the aspect's action is just
+`touch …report && echo 0 > …exit_code`. The toolchain's own `clippy-driver` does
+flag the code, so the toolchain is fine:
+
+```
+error: equal expressions as operands to `==`   (#[deny(clippy::eq_op)])
+```
+
+### Why
+
+`aspect_rules_lint_rust`'s `MODULE.bazel` sources `@rules_rust` from `rules_rs`
+(`use_extension("@rules_rs//rs:rules_rust.bzl", …)`), so the aspect's
+`rust_clippy_action.get_clippy_ready_crate_info(target, ctx)` (`clippy.bzl:134`)
+looks for a `CrateInfo` from `rules_rs++rules_rust+rules_rust`. This repo builds
+`rust_app` with **BCR `rules_rust@0.70.0`** (`rules_rust+`), whose `CrateInfo` is
+a different provider. `crate_info` comes back `None`, so the aspect takes its
+`noop_lint_action` branch (`clippy.bzl:144`). Both `rules_rust` repos coexist in
+the module graph.
+
+Net: 2.7.1 is consumable, but only actually lints `rules_rs`-built targets — for
+a BCR `rules_rust` repo it's a false-green. Write-up in `tmp/issue_879_comment.md`.
 <!-- --- END user-managed --- -->
 
 ## Project Layout
