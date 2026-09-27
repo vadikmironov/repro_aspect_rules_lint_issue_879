@@ -6,11 +6,11 @@
 # Please find documentation here:
 # https://github.com/bazel-contrib/rules_go/releases
 #
-bazel_dep(name = "rules_go", version = "0.61.1")
+bazel_dep(name = "rules_go", version = "0.63.0")
 
 # Gazelle is used to generate BUILD files and manage Go dependencies.
 # Documentation: https://github.com/bazel-contrib/bazel-gazelle
-bazel_dep(name = "gazelle", version = "0.51.3")
+bazel_dep(name = "gazelle", version = "0.54.0")
 
 # All go sdk versions are available via dl here:
 # https://go.dev/dl/
@@ -28,14 +28,14 @@ go_sdk.download(
     # https://github.com/bazel-contrib/rules_go/blob/master/go/private/sdk.bzl#L74
     #
     #sdks = {
-    #    "darwin_amd64": ("go1.25.5.darwin-amd64.tar.gz", "b69d51bce599e5381a94ce15263ae644ec84667a5ce23d58dc2e63e2c12a9f56"),
-    #    "darwin_arm64": ("go1.25.5.darwin-arm64.tar.gz", "bed8ebe824e3d3b27e8471d1307f803fc6ab8e1d0eb7a4ae196979bd9b801dd3"),
-    #    "linux_amd64": ("go1.25.5.linux-amd64.tar.gz", "9e9b755d63b36acf30c12a9a3fc379243714c1c6d3dd72861da637f336ebb35b"),
-    #    "linux_arm64": ("go1.25.5.linux-arm64.tar.gz", "b00b694903d126c588c378e72d3545549935d3982635ba3f7a964c9fa23fe3b9"),
-    #    "windows_amd64": ("go1.25.5.windows-amd64.zip", "ae756cce1cb80c819b4fe01b0353807178f532211b47f72d7fa77949de054ebb"),
+    #    "darwin_amd64": ("go1.26.5.darwin-amd64.tar.gz", "6231d8d3b8f5552ec6cbf6d685bdd5482e1e703214b120e89b3bf0d7bf1ef725"),
+    #    "darwin_arm64": ("go1.26.5.darwin-arm64.tar.gz", "efb87ff28af9a188d0536ef5d42e63dd52ba8263cd7344a993cc48dd11dedb6a"),
+    #    "linux_amd64": ("go1.26.5.linux-amd64.tar.gz", "5c2c3b16caefa1d968a94c1daca04a7ca301a496d9b086e17ad77bb81393f053"),
+    #    "linux_arm64": ("go1.26.5.linux-arm64.tar.gz", "fe4789e92b1f33358680864bbe8704289e7bb5fc207d80623c308935bd696d49"),
+    #    "windows_amd64": ("go1.26.5.windows-amd64.zip", "97e6b2a833b6d89f9ff17d25419ac0a7e3b482a044e9ab18cdef834bd834fd38"),
     #},
     #
-    version = "1.25.5",
+    version = "1.26.5",
 )
 
 # nogo static analysis of Go code (part of the lint feature). More information on

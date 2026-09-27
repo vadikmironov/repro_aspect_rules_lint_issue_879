@@ -1,66 +1,72 @@
 # repro_aspect_rules_lint_issue_879
 
 <!-- --- BEGIN user-managed --- -->
-Tracks the state of downstream Rust (clippy) linting in **aspect_rules_lint**,
-for a repo that builds its Rust with **BCR `rules_rust`**. Originally a repro for
-[#879](https://github.com/aspect-build/rules_lint/issues/879); now it shows where
-2.7.1 lands.
+Minimal repro for
+[aspect-build/rules_lint#879](https://github.com/aspect-build/rules_lint/issues/879):
+the clippy aspect from `aspect_rules_lint_rust` passes a Rust target that is
+built with BCR `rules_rust`, and clippy does not run.
 
-## The #879 packaging blockers are fixed in 2.7.1
+Last checked on 2026-09-27 with Bazel 9.2.0, `aspect_rules_lint` 2.9.0,
+`aspect_rules_lint_rust` 0.0.3 and `rules_rust` 0.74.0.
 
-In 2.6.0 the clippy aspect moved out of the umbrella module into a separate
-module that downstream repos couldn't pull in (not on the BCR; `export-ignore`
-stripped it from release archives; an in-tree `local_path_override` made
-overrides unresolvable). As of **2.7.1** that module is published to the Bazel
-Central Registry as **`aspect_rules_lint_rust`** (renamed from
-`aspect_rules_lint_rules_rust`), so a plain `bazel_dep` resolves with no
-overrides — this is the active **Variant A** in `MODULE.bazel`:
+## Packaging is fixed
+
+The packaging problems in the issue title are fixed since 2.7.1.
+`aspect_rules_lint_rust` is on the BCR, and a plain `bazel_dep` resolves:
 
 ```starlark
-bazel_dep(name = "aspect_rules_lint", version = "2.7.1")
-bazel_dep(name = "aspect_rules_lint_rust", version = "0.0.2")
+bazel_dep(name = "aspect_rules_lint", version = "2.9.0")
+bazel_dep(name = "aspect_rules_lint_rust", version = "0.0.3")
 ```
 
-```bash
-bazel mod graph        # resolves; pulls aspect_rules_lint@2.7.1 + rules_rs@0.0.83
-```
+## The clippy aspect does not run on a BCR `rules_rust` target
 
-(The old packaging-blocker variants B/C/D — `archive_override` / `git_override`
-against `main` HEAD — are kept commented in `MODULE.bazel` as pre-2.7.1 history.)
-
-## …but the clippy aspect silently no-ops on a BCR `rules_rust` target
-
-`apps/rust_app/src/main.rs` contains a deny-by-default `clippy::eq_op` violation,
-yet the lint test passes green:
+`apps/rust_app/src/main.rs` has a deny-by-default `clippy::eq_op` violation.
+The lint test passes:
 
 ```bash
 bazel test //apps/rust_app:rust_app.lint --test_tag_filters=lint
 # //apps/rust_app:rust_app.lint   PASSED      <-- expected FAIL
 ```
 
-clippy never runs. The report artifact
-(`bazel-bin/apps/rust_app/rust_app.AspectRulesLintClippy.report`) is empty, and
-`bazel test … -s` shows the aspect's action is just
-`touch …report && echo 0 > …exit_code`. The toolchain's own `clippy-driver` does
-flag the code, so the toolchain is fine:
+The report `bazel-bin/apps/rust_app/rust_app.AspectRulesLintClippy.report` is
+empty. The aspect action only creates the report and writes exit code 0:
 
+```bash
+bazel aquery 'outputs(".*AspectRulesLintClippy.report", deps(//apps/rust_app:rust_app))' \
+    --aspects=//tools/lint:linters.bzl%clippy --output_groups=rules_lint_human
+# touch …/rust_app.AspectRulesLintClippy.report && echo 0 > …/rust_app.AspectRulesLintClippy.report.exit_code
 ```
-error: equal expressions as operands to `==`   (#[deny(clippy::eq_op)])
+
+The toolchain is correct. The clippy aspect of `rules_rust` finds the violation:
+
+```bash
+bazel build //apps/rust_app:rust_app \
+    --aspects=@rules_rust//rust:defs.bzl%rust_clippy_aspect --output_groups=clippy_checks
+# error: equal expressions as operands to `==`   (`#[deny(clippy::eq_op)]` on by default)
 ```
 
 ### Why
 
-`aspect_rules_lint_rust`'s `MODULE.bazel` sources `@rules_rust` from `rules_rs`
-(`use_extension("@rules_rs//rs:rules_rust.bzl", …)`), so the aspect's
-`rust_clippy_action.get_clippy_ready_crate_info(target, ctx)` (`clippy.bzl:134`)
-looks for a `CrateInfo` from `rules_rs++rules_rust+rules_rust`. This repo builds
-`rust_app` with **BCR `rules_rust@0.70.0`** (`rules_rust+`), whose `CrateInfo` is
-a different provider. `crate_info` comes back `None`, so the aspect takes its
-`noop_lint_action` branch (`clippy.bzl:144`). Both `rules_rust` repos coexist in
-the module graph.
+`aspect_rules_lint_rust` gets `@rules_rust` from `rules_rs`
+([MODULE.bazel](https://github.com/aspect-build/rules_lint/blob/rust-v0.0.3/lint/rust/MODULE.bazel#L25)).
+This repo builds `rust_app` with BCR `rules_rust`. The two modules define
+different `CrateInfo` providers, so the aspect finds no `CrateInfo` on
+`rust_app`
+([clippy.bzl#L134](https://github.com/aspect-build/rules_lint/blob/rust-v0.0.3/lint/rust/clippy.bzl#L134))
+and uses its no-op action
+([clippy.bzl#L144-L145](https://github.com/aspect-build/rules_lint/blob/rust-v0.0.3/lint/rust/clippy.bzl#L144-L145)).
 
-Net: 2.7.1 is consumable, but only actually lints `rules_rs`-built targets — for
-a BCR `rules_rust` repo it's a false-green. Write-up in `tmp/issue_879_comment.md`.
+## Test a local rules_lint clone
+
+Override both modules with a git clone of rules_lint. Archives made by
+`git archive` do not contain `lint/rust`.
+
+```bash
+bazel test //apps/rust_app:rust_app.lint --test_tag_filters=lint --lockfile_mode=off \
+    --override_module=aspect_rules_lint=$HOME/src/rules_lint \
+    --override_module=aspect_rules_lint_rust=$HOME/src/rules_lint/lint/rust
+```
 <!-- --- END user-managed --- -->
 
 ## Project Layout
@@ -91,19 +97,25 @@ tools/setup/install_bazelisk.sh --system    # apt/.deb, prompts for sudo
 Linux only. Run `bazel version` to verify (restart your shell first if the
 installer added `~/.local/bin` to your PATH).
 
+Downloads go through `tools/setup/download_lib.sh`, which resumes from the bytes
+already on disk instead of restarting when a transfer stops making progress.
+Behind a slow or stalling proxy, raise `DOWNLOAD_STALL_SECONDS` (default 30, the
+seconds under `DOWNLOAD_MIN_SPEED` before an attempt is abandoned) or
+`DOWNLOAD_MAX_STALLED_RETRIES` (default 5).
+
 ## Common Commands
 
 ```bash
+# List runnable targets — apps, buildifier, venv (plain `//...` lists everything)
+bazel query 'kind("(py|cc|go|java|rust)_binary|buildifier|_venv", //...)'
+
 # Build / test everything
 bazel build //...
 bazel test //...                     # excludes lint tests — run lint separately
 
-# List runnable targets — apps, buildifier, venv (plain `//...` lists everything)
-bazel query 'kind("(py|cc|go|java|rust)_binary|buildifier|_venv", //...)'
-
 # Format source (all languages), then Bazel/Starlark files
+bazel run //:buildifier.fix
 bazel run //:format
-bazel run //:buildifier.fix          # Windows: tools\buildifier.bat fix
 ```
 
 Linting is a separate, generated step — per-target `lint_test` rules are emitted
@@ -114,11 +126,29 @@ bazel run //:lint_gen                # preview without writing: -- -mode diff
 bazel test --test_tag_filters=lint //...
 ```
 
-### Regenerate dependency locks
+### Sync dependencies
 
-After editing a language's dependency manifest, refresh its lockfile:
+After adding or removing a module extension repo in a `*.MODULE.bazel` segment, sync
+the `use_repo()` calls.
+After editing a language's dependency manifest, refresh its lockfile too.
 
 ```bash
+bazel mod tidy                                                        # Bazel  — use_repo() calls in the MODULE segments
 CARGO_BAZEL_REPIN=1 bazel fetch @crates//...                          # Rust   — tools/rust/Cargo.toml
 bazel run @rules_go//go -- mod tidy                                   # Go     — go.mod / go.sum
 ```
+
+## Local Disk Cache
+
+Faster local builds, shared across every Bazel project you build. Add to your
+**user-global `~/.bazelrc`** (not this repo — it applies to all your workspaces):
+
+```bash
+build --disk_cache=~/.cache/bazel-disk
+build --experimental_disk_cache_gc_max_size=15G   # bounded; auto-GC'd when idle (Bazel 7.4+)
+```
+
+The same action-cache (AC/CAS) mechanism as the remote cache, on local disk:
+identical actions (e.g. a shared protobuf compile) run once and are reused
+everywhere, and `bazel clean` becomes cheap to recover from. Trades disk for
+speed — tune the size to taste.

@@ -1,5 +1,9 @@
 # Created by https://www.toptal.com/developers/gitignore/
 
+# --- BEGIN user-managed ---
+# Project-specific ignores live here. Preserved across re-bootstrap.
+# --- END user-managed ---
+
 ### Bazel ###
 # gitignore template for Bazel build system
 # website: https://bazel.build/
@@ -10,6 +14,9 @@
 
 # Local Bazel settings (API keys, personal preferences)
 user.bazelrc
+
+# Per-machine Claude Code overrides; .claude/settings.json is tracked.
+.claude/settings.local.json
 
 # Directories for the Bazel IntelliJ plugin containing the generated
 # IntelliJ project files and plugin configuration. Seperate directories are

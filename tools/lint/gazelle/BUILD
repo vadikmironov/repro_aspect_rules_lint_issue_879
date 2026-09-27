@@ -17,6 +17,7 @@ go_library(
     importpath = "repro_aspect_rules_lint_issue_879/tools/lint/gazelle",
     visibility = ["//visibility:public"],
     deps = [
+        "//tools/gazelle/directives",
         "@gazelle//config",
         "@gazelle//label",
         "@gazelle//language",
@@ -26,10 +27,16 @@ go_library(
     ],
 )
 
-# Standalone gazelle binary scoped to our lint extension only.
+# Standalone gazelle binary scoped to our lint extension, plus the
+# generation-free vocab extension so this binary recognises sibling
+# generators' directives (publish_*) instead of warning on them. vocab
+# owns no kinds and emits no rules, so it cannot affect lint generation.
 # Invoked via `gazelle(..., gazelle = ":gazelle_lint")` in //BUILD.
 gazelle_binary(
     name = "gazelle_lint",
-    languages = [":lint_lang"],
+    languages = [
+        ":lint_lang",
+        "//tools/gazelle/vocab",
+    ],
     visibility = ["//visibility:public"],
 )

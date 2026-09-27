@@ -3,7 +3,8 @@
 // driven by the source-rule kind of each package's canonical target.
 //
 // Each linter's lint_test factory lives in //tools/lint:linters.bzl
-// (clang_tidy_test, clippy_test, pmd_test, spotbugs_test, ruff_test).
+// (clang_tidy_test, clippy_test, pmd_test, spotbugs_test, ruff_test,
+// ty_test).
 // This extension emits one or more *_test targets per package based on
 // the source-rule kinds present, tagging each with "lint" so CI can
 // select them via --test_tag_filters=lint.
@@ -23,6 +24,8 @@ import (
 	"github.com/bazelbuild/bazel-gazelle/repo"
 	"github.com/bazelbuild/bazel-gazelle/resolve"
 	"github.com/bazelbuild/bazel-gazelle/rule"
+
+	"repro_aspect_rules_lint_issue_879/tools/gazelle/directives"
 )
 
 const (
@@ -31,8 +34,10 @@ const (
 	// directiveIgnore is the per-package opt-out. A BUILD file carrying
 	// `# gazelle:lint_ignore` is excluded from lint_test generation
 	// regardless of which source rule kinds it contains. Existing
-	// lint_test rules in such a package are reaped on the next run.
-	directiveIgnore = "lint_ignore"
+	// lint_test rules in such a package are reaped on the next run. The
+	// directive string is owned by //tools/gazelle/directives so the
+	// vocab extension can advertise it to sibling generators' binaries.
+	directiveIgnore = directives.LintIgnore
 
 	// directiveKeep is the per-package freeze. A BUILD file carrying
 	// `# gazelle:lint_ignore_keep` is left exactly as written: lint_gen
@@ -40,7 +45,7 @@ const (
 	// Used to hand-gate generated rules (e.g. wrapping them in
 	// feature:lint section markers in a shipped BUILD file) without
 	// gazelle clobbering them on regen.
-	directiveKeep = "lint_ignore_keep"
+	directiveKeep = directives.LintIgnoreKeep
 
 	// tagSkip is the per-target opt-out. A source rule (py_library,
 	// cc_binary, etc.) carrying `tags = ["no-lint"]` is skipped by every
